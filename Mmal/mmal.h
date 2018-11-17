@@ -1,4 +1,4 @@
-/**
+1/**
  * Hlavickovy soubor pro My MALloc
  * Demonstracni priklad pro 1. ukol IPS/2018
  * Ales Smrcka

@@ -59,7 +59,7 @@ static
 size_t allign_page(size_t size)
 {
     // FIXME
-    (void)size;
+    size = (size + (PAGE_SIZE - 1)/PAGE_SIZE * PAGE_SIZE);//SPRAVNE??????
     return size;
 }
 
@@ -79,9 +79,32 @@ size_t allign_page(size_t size)
 static
 Arena *arena_alloc(size_t req_size)
 {
-    // FIXME
-    (void)req_size;
-    return NULL;
+	Arena *arena = mmap(NULL, allign_page(req_size), PROT_READ | PROT_WRITE, MAP_SHARED, -1, 0);//
+
+	if(arena == MAP_FAILED)
+		return NULL;
+    
+    if(first_arena == NULL)
+    {
+    	*arena = struct Arena{arena, allign_page(req_size)};//memcpy???   jediny prvek, ukazuje sam na sebe
+		first_arena = arena;
+		
+    }
+    else
+    {
+    	Arena *tmp_arena = first_arena;
+    	while(tmp_arena->next != first_arena)
+    		tmp_arena = tmp_arena->next;
+
+    	tmp_arena->next = arena;
+    	*arena = struct Arena{first_arena, allign_page(req_size)};
+
+
+    }
+
+	
+
+    return arena;
 }
 
 /**
@@ -100,6 +123,7 @@ static
 void hdr_ctor(Header *hdr, size_t size)
 {
     // FIXME
+    
     (void)hdr;
     (void)size;
 }
