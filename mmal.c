@@ -216,7 +216,22 @@ static
 Header *hdr_split(Header *hdr, size_t req_size)
 {
     assert((hdr->size >= req_size + 2*sizeof(Header)));
-    *(Header *)(&hdr[1] + req_size) = (Header){hdr->next,hdr->size - req_size - sizeof(struct header) ,0};
+
+    
+    printf("BBB\n");
+    printf("ADRESS: %d\n",*(Header *)(&hdr[1]));
+    printf("ADRESS: %d\n",*(Header *)(&hdr[1] + req_size));
+    printf("%d\n",(req_size));
+    printf("%d\n",first_arena ->size);
+    if(first_arena->next != NULL)
+        printf("%d\n",first_arena->next->size);
+    printf("ASD00\n");
+
+    printf("ADRESS: %d\n",*(Header *)(&hdr[1]+req_size));
+    //*(Header *)(&hdr[1] + req_size) = (Header){hdr->next,hdr->size - req_size - sizeof(struct header) ,0};
+    *(Header *)(&hdr[1] + req_size) = (Header){hdr->next, hdr->size - req_size - sizeof(struct header) , 0};
+    printf("BBB\n");
+
     hdr->size = req_size;
     hdr->next = (Header *)(&hdr[1] + req_size);
     return  hdr->next;
@@ -280,18 +295,36 @@ Header *first_fit(size_t size)
     assert(size > 0);
     Header *first_header = (Header *)(&first_arena[1]);
     Header *tmp_header = first_header;
+    printf("***\n");
     printf("%d\n", size);
     printf("%d\n", tmp_header->size);
     printf("%d\n", tmp_header->next->size);
     printf("%d\n", tmp_header->next->asize);
+    printf("**\n");
+    do
+    {
+        printf("IN: %d\n", tmp_header->size);
+        if(tmp_header->asize == 0 && tmp_header->size >= size)
+            return tmp_header;
+
+        tmp_header = tmp_header->next;
+    }while(tmp_header != first_header);
+
+
+
+    /*
     while(tmp_header->asize != 0 && (tmp_header->size <= size || tmp_header->next != tmp_header)) //FIX logika while nefunguje kdyz se prida 2 arena a chceme alokovat do pameti druhe areny, ukazatele sedi a velikosti  taky pouze while z nejakeho duvodu neprocykli
     {
             printf("b\n");
             tmp_header = tmp_header->next;
     }
-    printf("%d\n", size);
 
-    printf("%d\n", tmp_header->size);
+    */
+    //printf("%d\n", size);
+
+    //printf("%d\n", tmp_header->size);
+
+
 
     if(tmp_header->size >= size)
         return tmp_header;
@@ -349,7 +382,15 @@ void *mmalloc(size_t size)
                 if ( (allo = first_fit(size)) != NULL)
                 {
                     if (hdr_should_split(allo, size))
+                    {
+
+                    printf("AAA\n");
+
                         hdr_split(allo, size);
+
+                    printf("AAA\n");
+
+                    }
                     allo->asize = size;
                     return (&allo[1]);
                 }
