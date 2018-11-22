@@ -1,3 +1,4 @@
+// xgajdo24
 /**
  * Implementace My MALloc
  * Demonstracni priklad pro 1. ukol IPS/2018
@@ -8,10 +9,14 @@
 #include <sys/mman.h> // mmap
 #include <stdbool.h> // bool
 #include <assert.h> // assert
-#include <stdio.h>
+#include <string.h>
 
 #ifndef MAP_ANONYMOUS
 #define MAP_ANONYMOUS 0x20
+#endif
+
+#ifndef arena_append
+    static void arena_append(Arena *a);
 #endif
 
 #ifdef NDEBUG
@@ -77,10 +82,7 @@ Arena *first_arena = NULL;
 static
 size_t allign_page(size_t size)
 {
-  //  printf("%d\n", size);
- //   printf("%d\n", size + );
     size = ((size + (PAGE_SIZE - 1))/PAGE_SIZE * PAGE_SIZE);
-   // printf("%d\n", size);
     return size;
 }
 
@@ -110,7 +112,14 @@ Arena *arena_alloc(size_t req_size)
     *(Arena*)arena = (Arena){NULL, allign_page(req_size)};
 
     arena_append(arena);
-    hdr_ctor((Header*)(&arena[1]),arena->size - sizeof(struct arena) - sizeof(struct header));
+    *(Header *) (&arena[1]) = (Header){(Header*)(&arena[1]),arena->size - sizeof(struct arena) - sizeof(struct header),0};
+
+    Header *first_header = (Header*)(first_arena + 1);
+    Header *tmp = first_header;
+    while(tmp->next != first_header)
+        tmp = tmp->next;    
+    ((Header*)(&arena[1]))->next = first_header;
+    tmp->next = ((Header*)(&arena[1]));
 
     return arena;
 }
@@ -151,20 +160,9 @@ void arena_append(Arena *a)
 static
 void hdr_ctor(Header *hdr, size_t size)
 {
-    assert(size > 0);
+    assert(size > 0);  
     *(Header *) hdr = (Header){NULL,size,0};
-    Header *first_header = (Header * )(&first_arena[1]);
 
-    if (first_header->next == NULL)
-            hdr->next = hdr;
-    else 
-    {
-        Header *tmp_header = first_header;
-        while(tmp_header->next != first_header)
-            tmp_header = tmp_header->next;
-        tmp_header->next = hdr;
-        hdr->next = first_header;
-    }
 }
 
 /**
@@ -216,26 +214,12 @@ static
 Header *hdr_split(Header *hdr, size_t req_size)
 {
     assert((hdr->size >= req_size + 2*sizeof(Header)));
-
-    
-    printf("BBB\n");
-    printf("ADRESS: %d\n",*(Header *)(&hdr[1]));
-    printf("ADRESS: %d\n",*(Header *)(&hdr[1] + req_size));
-    printf("%d\n",(req_size));
-    printf("%d\n",first_arena ->size);
-    if(first_arena->next != NULL)
-        printf("%d\n",first_arena->next->size);
-    printf("ASD00\n");
-
-    printf("ADRESS: %d\n",*(Header *)(&hdr[1]+req_size));
-    //*(Header *)(&hdr[1] + req_size) = (Header){hdr->next,hdr->size - req_size - sizeof(struct header) ,0};
-    *(Header *)(&hdr[1] + req_size) = (Header){hdr->next, hdr->size - req_size - sizeof(struct header) , 0};
-    printf("BBB\n");
-
+    int *tmp = ((void*)hdr + sizeof(Header) + req_size);
+    hdr_ctor( (Header *) tmp, hdr->size - req_size - sizeof(struct header));
+    ((Header *)tmp)->next = hdr->next;
+    hdr->next = (Header *)tmp;
     hdr->size = req_size;
-    hdr->next = (Header *)(&hdr[1] + req_size);
     return  hdr->next;
-    //return NULL; 
 
 }
 
@@ -255,7 +239,8 @@ bool hdr_can_merge(Header *left, Header *right)
     
     if(left->asize == 0 && right->asize == 0)
     {
-        if(&left[1] + left->size == right)
+        int *tmp = ((void*)left + sizeof(Header)+ left->size);
+        if((Header*)tmp == right)
             return true;
     }
 
@@ -275,11 +260,8 @@ void hdr_merge(Header *left, Header *right)
     assert(left->next == right);
     assert(left != right);
 
-    //if(hdr_can_merge(left,right))
-    //{
     left->size += sizeof(struct header) + right->size;
     left->next = right->next;
-    //}
 
 }
 
@@ -295,39 +277,13 @@ Header *first_fit(size_t size)
     assert(size > 0);
     Header *first_header = (Header *)(&first_arena[1]);
     Header *tmp_header = first_header;
-    printf("***\n");
-    printf("%d\n", size);
-    printf("%d\n", tmp_header->size);
-    printf("%d\n", tmp_header->next->size);
-    printf("%d\n", tmp_header->next->asize);
-    printf("**\n");
     do
     {
-        printf("IN: %d\n", tmp_header->size);
         if(tmp_header->asize == 0 && tmp_header->size >= size)
             return tmp_header;
-
         tmp_header = tmp_header->next;
     }while(tmp_header != first_header);
 
-
-
-    /*
-    while(tmp_header->asize != 0 && (tmp_header->size <= size || tmp_header->next != tmp_header)) //FIX logika while nefunguje kdyz se prida 2 arena a chceme alokovat do pameti druhe areny, ukazatele sedi a velikosti  taky pouze while z nejakeho duvodu neprocykli
-    {
-            printf("b\n");
-            tmp_header = tmp_header->next;
-    }
-
-    */
-    //printf("%d\n", size);
-
-    //printf("%d\n", tmp_header->size);
-
-
-
-    if(tmp_header->size >= size)
-        return tmp_header;
     return NULL;
 }
 
@@ -375,30 +331,17 @@ void *mmalloc(size_t size)
             else
             {
                 arena_alloc(allign_page(size+sizeof(struct arena) + sizeof(struct header)));
-               // printf("%p\n", (&first_arena[1])->next);
-               // printf("%d\n", (&first_arena[1])->size);
-              //  printf("%p\n", first_arena->next +1);
-
                 if ( (allo = first_fit(size)) != NULL)
                 {
                     if (hdr_should_split(allo, size))
                     {
-
-                    printf("AAA\n");
-
                         hdr_split(allo, size);
-
-                    printf("AAA\n");
-
                     }
                     allo->asize = size;
                     return (&allo[1]);
                 }
                 else
-                {
-                    printf("a\n");
                     return NULL;
-                }
             }
         }
         else
@@ -431,7 +374,9 @@ void mfree(void *ptr)
     Header *tmp = (Header *)(ptr-sizeof(struct header));
     tmp->asize = 0;
     if (hdr_can_merge(tmp,tmp->next))
-        hdr_merge(tmp,tmp->next);
+        {
+            hdr_merge(tmp,tmp->next);
+        }
     if (hdr_can_merge(hdr_get_prev(tmp),tmp))
         hdr_merge(hdr_get_prev(tmp),tmp);
 
@@ -446,8 +391,19 @@ void mfree(void *ptr)
  */
 void *mrealloc(void *ptr, size_t size)
 {
-    // FIXME
-    (void)ptr;
-    (void)size;
+    if (size != 0)
+    {
+        if (size == ((Header *)(ptr-sizeof(struct header)))->size)
+           return ptr;
+        void*tmp = mmalloc(size);
+        if (tmp != NULL)
+        {
+           memcpy(tmp,ptr,size);
+           mfree(ptr);
+           return tmp;
+        }
+    }
+    else
+        mfree(ptr);
     return NULL;
 }
